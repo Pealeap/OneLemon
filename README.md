@@ -5,7 +5,7 @@ Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on
 If something isn't working and you have a fix feel free to make a pr!
 
 > ## Disclaimer
-> **This has only been tested on a single device: a rooted Samsung Galaxy S26 Ultra running One UI 8.5.**
+> **This has been tested on only a handful of devices, and it seems if you want to install it without making modifications, it has to be on Android 16**
 > It may not work on other Samsung models, other One UI versions, or other devices at all. It is experimental, it replaces core parts of a running system, and it can crash, hang or soft-brick your phone, fill `/data`, or break radio/SMS. **Back up everything first. Use at your own risk.**
 > Also, I did use AI a fair bit in this project, it would have taken a LOT longer without it.
 
