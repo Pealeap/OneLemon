@@ -1,6 +1,6 @@
 # OneLineage
 
-# REBOOT NOTES: Use [this module](https://github.com/Pealeap/Watchdog-Feeder] to fix the reboot issue.)
+# REBOOT NOTES: Use [this module](https://github.com/Pealeap/Watchdog-Feeder) to fix the reboot issue.
 
  **NOTE: OneLineage is just a proof of concept, this repo should provide you with enough to port other roms to bootloader locked devices, the lineageos with this repo is just a demo of this capability, and therefore does not fully work. Have fun!**
 
