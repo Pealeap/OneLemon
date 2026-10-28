@@ -1,4 +1,4 @@
-package com.wewaffles.onelineage;
+package org.lemonui.onelemon;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -10,8 +10,11 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.RadioButton;
 import android.widget.TextView;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.OpenableColumns;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -19,32 +22,20 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
 
-    public enum Flavor {
-        VANILLA,
-        GAPPS
-    }
-
     private TextView tvRootStatus;
     private TextView tvOsStatus;
     private TextView tvImageStatus;
     private TextView tvHeaderSubtitle;
-    private TextView tvDownloadDesc;
-    private TextView tvDownloadProgress;
-    private ProgressBar pbDownload;
     private TextView tvConsoleLog;
     private TextView tvLogStatus;
-
-    private LinearLayout cardFlavorVanilla;
-    private LinearLayout cardFlavorGapps;
-    private RadioButton rbVanilla;
-    private RadioButton rbGapps;
+    private TextView tvDownloadDesc;
+    private TextView tvDownloadProgress;
+    private ProgressBar pbDownload;    
 
     private Button btnDownloadLineage;
     private Button btnDeleteLineage;
@@ -57,15 +48,9 @@ public class MainActivity extends Activity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean isRootGranted = false;
     private String suBinary = "su";
-    private Flavor selectedFlavor = Flavor.VANILLA;
 
     private static final String STAGE_DIR = "/data/local/tmp/lineage_stage";
     private static final String SYSTEM_RAW = STAGE_DIR + "/system.raw";
-
-    private static final String URL_VANILLA = "https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2016/LineageOS-23.2-20260524-VANILLA-EXT4-GSI.7z?use_mirror=autoselect";
-    private static final String URL_GAPPS = "https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2016/LineageOS-23.2-20260524-GAPPS-EXT4-GSI.7z?use_mirror=autoselect";
-    private static final long ESTIMATED_VANILLA_BYTES = 922022276L;
-    private static final long ESTIMATED_GAPPS_BYTES = 1167859370L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,19 +67,14 @@ public class MainActivity extends Activity {
         tvConsoleLog = findViewById(R.id.tv_console_log);
         tvLogStatus = findViewById(R.id.tv_log_status);
 
-        cardFlavorVanilla = findViewById(R.id.card_flavor_vanilla);
-        cardFlavorGapps = findViewById(R.id.card_flavor_gapps);
-        rbVanilla = findViewById(R.id.rb_vanilla);
-        rbGapps = findViewById(R.id.rb_gapps);
-
         btnDownloadLineage = findViewById(R.id.btn_download_lineage);
         btnDeleteLineage = findViewById(R.id.btn_delete_lineage);
         btnBootLineage = findViewById(R.id.btn_boot_lineage);
         btnReturnOneUI = findViewById(R.id.btn_return_oneui);
         btnBackupLauncher = findViewById(R.id.btn_backup_launcher);
         btnRestoreLauncher = findViewById(R.id.btn_restore_launcher);
+        tvDownloadDesc.setText("Choose image.");
 
-        setupFlavorSelection();
         extractAssets();
         checkRootAndSystem();
 
@@ -110,34 +90,6 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         checkRootAndSystem();
-    }
-
-    private void setupFlavorSelection() {
-        View.OnClickListener clickVanilla = v -> selectFlavor(Flavor.VANILLA);
-        View.OnClickListener clickGapps = v -> selectFlavor(Flavor.GAPPS);
-
-        cardFlavorVanilla.setOnClickListener(clickVanilla);
-        cardFlavorGapps.setOnClickListener(clickGapps);
-
-        selectFlavor(Flavor.GAPPS);
-    }
-
-    private void selectFlavor(Flavor flavor) {
-        selectedFlavor = flavor;
-        rbVanilla.setChecked(flavor == Flavor.VANILLA);
-        rbGapps.setChecked(flavor == Flavor.GAPPS);
-
-        cardFlavorVanilla.setBackgroundResource(flavor == Flavor.VANILLA ? R.drawable.radio_item_selected : R.drawable.radio_item_unselected);
-        cardFlavorGapps.setBackgroundResource(flavor == Flavor.GAPPS ? R.drawable.radio_item_selected : R.drawable.radio_item_unselected);
-
-        switch (flavor) {
-            case VANILLA:
-                tvDownloadDesc.setText("Vanilla: The lightweight option");
-                break;
-            case GAPPS:
-                tvDownloadDesc.setText("MindTheGapps: LineageOS 23.2 + Google Play Store & Services.");
-                break;
-        }
     }
 
     private void appendLog(final String text) {
@@ -231,10 +183,10 @@ public class MainActivity extends Activity {
 
                 mainHandler.post(() -> {
                     if (osVer != null && !osVer.trim().isEmpty()) {
-                        tvOsStatus.setText("Current Userspace: LineageOS " + osVer.trim());
+                        tvOsStatus.setText("Current Userspace: Lemon UI " + osVer.trim());
                         tvOsStatus.setTextColor(Color.parseColor("#78D9EC"));
                         if (tvHeaderSubtitle != null) {
-                            tvHeaderSubtitle.setText("Dual Userspace Switcher • LineageOS");
+                            tvHeaderSubtitle.setText("Dual Userspace Switcher • Lemon UI");
                         }
                     } else {
                         tvOsStatus.setText("Current Userspace: Samsung One UI (Stock)");
@@ -264,13 +216,13 @@ public class MainActivity extends Activity {
                     if (out != null && !out.contains("MISSING") && !out.trim().isEmpty()) {
                         tvImageStatus.setText("Image: Installed & Ready (" + out.trim().replaceAll("\\s+", " ") + ")");
                         tvImageStatus.setTextColor(Color.parseColor("#A5D6A7"));
-                        btnDownloadLineage.setText("Reinstall Image");
+                        btnDownloadLineage.setText("Choose another img");
                         btnBootLineage.setEnabled(true);
                         btnBootLineage.setAlpha(1.0f);
                     } else {
                         tvImageStatus.setText("Image: Not Installed (Missing system.raw)");
                         tvImageStatus.setTextColor(Color.parseColor("#FFB4AB"));
-                        btnDownloadLineage.setText("Download & Install");
+                        btnDownloadLineage.setText("Choose ROM image");
                         btnBootLineage.setEnabled(false);
                         btnBootLineage.setAlpha(0.5f);
                     }
@@ -323,180 +275,7 @@ public class MainActivity extends Activity {
                     }).waitFor();
                 } catch (Exception ignored) {}
             }
-            appendLog("OneLineage engine assets unpacked & verified.");
-        });
-    }
-
-    private void downloadLineage() {
-        if (!isRootGranted) {
-            appendLog("ERROR: Root privilege required to set up LineageOS!");
-            return;
-        }
-        startNetworkDownload(selectedFlavor);
-    }
-
-    private void downloadFileWithRedirects(String initialUrl, File targetFile, long expectedBytes) throws Exception {
-        String currentUrl = initialUrl;
-        HttpURLConnection conn = null;
-        int redirectCount = 0;
-        final int MAX_REDIRECTS = 10;
-
-        while (redirectCount < MAX_REDIRECTS) {
-            URL url = new URL(currentUrl);
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "Wget/1.21.3");
-            conn.setRequestProperty("Accept", "*/*");
-            conn.setConnectTimeout(25000);
-            conn.setReadTimeout(30000);
-            conn.setInstanceFollowRedirects(false);
-
-            int code = conn.getResponseCode();
-            if (code == HttpURLConnection.HTTP_MOVED_PERM ||
-                code == HttpURLConnection.HTTP_MOVED_TEMP ||
-                code == HttpURLConnection.HTTP_SEE_OTHER ||
-                code == 307 || code == 308) {
-
-                String loc = conn.getHeaderField("Location");
-                if (loc == null || loc.trim().isEmpty()) {
-                    throw new Exception("Redirect code " + code + " without Location header");
-                }
-                currentUrl = loc.trim();
-                conn.disconnect();
-                redirectCount++;
-                appendLog("Following mirror redirect [" + redirectCount + "]...");
-                continue;
-            }
-
-            if (code != HttpURLConnection.HTTP_OK) {
-                throw new Exception("HTTP server error code: " + code);
-            }
-
-            break;
-        }
-
-        if (redirectCount >= MAX_REDIRECTS || conn == null) {
-            throw new Exception("Too many redirects: " + redirectCount);
-        }
-
-        long contentLength = -1;
-        try {
-            contentLength = Long.parseLong(conn.getHeaderField("Content-Length"));
-        } catch (Exception ignored) {}
-        final long totalBytes = (contentLength > 0) ? contentLength : expectedBytes;
-
-        mainHandler.post(() -> {
-            pbDownload.setMax(100);
-            pbDownload.setProgress(0);
-        });
-
-        long startMs = System.currentTimeMillis();
-        long lastUpdateMs = 0;
-        long currentBytes = 0;
-
-        try (InputStream in = conn.getInputStream();
-             OutputStream out = new FileOutputStream(targetFile)) {
-
-            byte[] buffer = new byte[65536];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-                currentBytes += read;
-
-                long now = System.currentTimeMillis();
-                if (now - lastUpdateMs > 250) {
-                    lastUpdateMs = now;
-                    final int pct = (totalBytes > 0) ? (int) Math.min(100, (currentBytes * 100) / totalBytes) : 0;
-                    final long elapsedSec = Math.max(1, (now - startMs) / 1000);
-                    final double speedMb = (currentBytes / 1048576.0) / elapsedSec;
-                    final String progStr = String.format("Downloading: %d MB / %d MB (%d%%) • %.1f MB/s",
-                            currentBytes / 1048576, totalBytes / 1048576, pct, speedMb);
-                    mainHandler.post(() -> {
-                        pbDownload.setProgress(pct);
-                        tvDownloadProgress.setText(progStr);
-                    });
-                }
-            }
-            out.flush();
-        } finally {
-            conn.disconnect();
-        }
-
-        if (targetFile.length() < 1000000) {
-            throw new Exception("Downloaded file is too small (" + targetFile.length() + " bytes).");
-        }
-    }
-
-    private void startNetworkDownload(final Flavor flavor) {
-        executor.execute(() -> {
-            setLogStatus("Preparing…");
-            mainHandler.post(() -> {
-                pbDownload.setVisibility(View.VISIBLE);
-                pbDownload.setIndeterminate(false);
-                pbDownload.setProgress(0);
-                tvDownloadProgress.setVisibility(View.VISIBLE);
-                tvDownloadProgress.setText("Connecting to official SourceForge release…");
-                btnDownloadLineage.setEnabled(false);
-            });
-
-            appendLog("\n[SETUP] Initializing stage directory: " + STAGE_DIR);
-            try {
-                runRootCmdDrained("mkdir -p " + STAGE_DIR + " && chmod 777 " + STAGE_DIR);
-                appendLog("[SETUP] Wiping existing userdata for a fresh OOBE...");
-                runRootCmdDrained(wipeUserDataCmd());
-
-                String downloadUrl = (flavor == Flavor.GAPPS) ? URL_GAPPS : URL_VANILLA;
-                final long totalBytes = (flavor == Flavor.GAPPS) ? ESTIMATED_GAPPS_BYTES : ESTIMATED_VANILLA_BYTES;
-                // Download into the app's own cache dir, NOT STAGE_DIR directly: this
-                // process writes as the unprivileged app, and /data/local/tmp paths
-                // created by root are labeled shell_data_file, which SELinux blocks
-                // untrusted_app from writing to no matter what chmod says (this is the
-                // actual cause of "lineage_dl.7z: open failed: EACCES"). su (used below
-                // for extraction) can read the app's cache dir fine, same as
-                // extractAssets() already does for the other staged files.
-                final File targetArchive = new File(getCacheDir(), "lineage_dl.7z");
-
-                appendLog("[NETWORK DOWNLOAD] Fetching " + flavor.name() + " edition directly via native HTTP engine...");
-                appendLog("URL: " + downloadUrl);
-                setLogStatus("Downloading…");
-
-                downloadFileWithRedirects(downloadUrl, targetArchive, totalBytes);
-
-                appendLog("✓ Download completed successfully! (" + (targetArchive.length() / 1048576) + " MB)");
-                setLogStatus("Extracting…");
-                mainHandler.post(() -> {
-                    pbDownload.setIndeterminate(true);
-                    tvDownloadProgress.setText("Decompressing image with ARM64 7-Zip…");
-                });
-
-                appendLog("Extracting " + targetArchive.getAbsolutePath() + " via native 7zz...");
-                String extractCmd = "rm -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + "; " +
-                                   STAGE_DIR + "/7zz x -y -o" + STAGE_DIR + " " + targetArchive.getAbsolutePath() + " && " +
-                                   "mv -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + " && " +
-                                   "rm -f " + targetArchive.getAbsolutePath() + " && chmod 644 " + SYSTEM_RAW;
-                int extRet = runRootCmdDrained(extractCmd);
-                if (extRet != 0 || !new File(SYSTEM_RAW).exists()) {
-                    throw new Exception("7zz extraction failed (exit " + extRet + ") - system.raw was not produced");
-                }
-
-                appendLog("✓ Extraction complete -> system.raw ready!");
-
-                mainHandler.post(() -> {
-                    pbDownload.setVisibility(View.GONE);
-                    tvDownloadProgress.setText("LineageOS 23.2 (" + flavor.name() + ") installed successfully!");
-                    btnDownloadLineage.setEnabled(true);
-                });
-                setLogStatus("Ready");
-                checkImageStatus();
-
-            } catch (Exception e) {
-                appendLog("Download / setup failed: " + e.getMessage());
-                setLogStatus("Error");
-                mainHandler.post(() -> {
-                    pbDownload.setVisibility(View.GONE);
-                    tvDownloadProgress.setText("Setup failed: " + e.getMessage());
-                    btnDownloadLineage.setEnabled(true);
-                });
-            }
+            appendLog("OneLemon engine assets unpacked & verified.");
         });
     }
 
@@ -530,7 +309,7 @@ public class MainActivity extends Activity {
 
     private void confirmDeleteLineage() {
         new AlertDialog.Builder(this)
-            .setTitle("Delete LineageOS Files?")
+            .setTitle("Delete Lemon UI Files?")
             .setMessage("This will cleanly unmount the container, detach loop devices, and remove system.raw to free up ~3.5GB. You can reinstall anytime.")
             .setPositiveButton("Delete", (dialog, which) -> deleteLineage())
             .setNegativeButton("Cancel", null)
@@ -588,7 +367,7 @@ public class MainActivity extends Activity {
                     appendLog("✗ system.raw could not be fully removed (a loop device is still holding it busy). Try again, or reboot and retry.");
                     setLogStatus("Error");
                 } else {
-                    appendLog("✓ LineageOS files deleted cleanly. All loop mounts detached!");
+                    appendLog("✓ Lemon UI files deleted cleanly. All loop mounts detached!");
                     setLogStatus("Idle");
                 }
                 checkImageStatus();
@@ -601,10 +380,10 @@ public class MainActivity extends Activity {
 
     private void bootLineage() {
         if (!isRootGranted) {
-            appendLog("ERROR: Root privilege required to boot LineageOS!");
+            appendLog("ERROR: Root privilege required to boot Lemon UI!");
             return;
         }
-        appendLog("\n[START] Preparing LineageOS 23.2 takeover...");
+        appendLog("\n[START] Preparing Lemon UI takeover...");
         setLogStatus("Switching…");
         executor.execute(() -> {
             try {
@@ -719,4 +498,169 @@ public class MainActivity extends Activity {
             }
         });
     }
+    private static final int REQ_PICK_IMAGE = 1001;
+
+private void downloadLineage() {
+    if (!isRootGranted) {
+        appendLog("ERROR: Root privilege required to set up Lemon UI!");
+        return;
+    }
+    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    i.addCategory(Intent.CATEGORY_OPENABLE);
+    i.setType("*/*");
+    startActivityForResult(i, REQ_PICK_IMAGE);
+}
+
+@Override
+protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK
+            && data != null && data.getData() != null) {
+        importImage(data.getData());
+    }
+}
+
+private String queryName(Uri uri) {
+    try (Cursor c = getContentResolver().query(uri, null, null, null, null)) {
+        if (c != null && c.moveToFirst()) {
+            int idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+            if (idx >= 0) return c.getString(idx);
+        }
+    } catch (Exception ignored) {}
+    return "arquivo";
+}
+
+private long querySize(Uri uri) {
+    try (Cursor c = getContentResolver().query(uri, null, null, null, null)) {
+        if (c != null && c.moveToFirst()) {
+            int idx = c.getColumnIndex(OpenableColumns.SIZE);
+            if (idx >= 0 && !c.isNull(idx)) return c.getLong(idx);
+        }
+    } catch (Exception ignored) {}
+    return -1;
+}
+
+private void copyUriToFile(Uri uri, File target, long totalBytes) throws Exception {
+    mainHandler.post(() -> {
+        pbDownload.setMax(100);
+        pbDownload.setProgress(0);
+    });
+    long start = System.currentTimeMillis();
+    long last = 0, cur = 0;
+    try (InputStream in = getContentResolver().openInputStream(uri);
+         OutputStream out = new FileOutputStream(target)) {
+        if (in == null) throw new Exception("Não foi possível abrir o arquivo selecionado");
+        byte[] buf = new byte[65536];
+        int r;
+        while ((r = in.read(buf)) != -1) {
+            out.write(buf, 0, r);
+            cur += r;
+            long now = System.currentTimeMillis();
+            if (now - last > 250) {
+                last = now;
+                final int pct = totalBytes > 0 ? (int) Math.min(100, cur * 100 / totalBytes) : 0;
+                final double mbs = (cur / 1048576.0) / Math.max(1, (now - start) / 1000);
+                final String s = String.format("Copiando: %d MB%s • %.1f MB/s",
+                        cur / 1048576,
+                        totalBytes > 0 ? " / " + (totalBytes / 1048576) + " MB (" + pct + "%)" : "",
+                        mbs);
+                mainHandler.post(() -> {
+                    pbDownload.setProgress(pct);
+                    tvDownloadProgress.setText(s);
+                });
+            }
+        }
+        out.flush();
+    }
+}
+
+// 0 = 7z, 1 = Android sparse, 2 = raw/outro
+private int sniffFormat(File f) throws Exception {
+    byte[] h = new byte[6];
+    try (InputStream in = new java.io.FileInputStream(f)) {
+        if (in.read(h) < 6) return 2;
+    }
+    if ((h[0] & 0xFF) == '7' && h[1] == 'z' && (h[2] & 0xFF) == 0xBC
+            && (h[3] & 0xFF) == 0xAF && h[4] == 0x27 && h[5] == 0x1C) return 0;
+    if ((h[0] & 0xFF) == 0x3A && (h[1] & 0xFF) == 0xFF
+            && (h[2] & 0xFF) == 0x26 && (h[3] & 0xFF) == 0xED) return 1;
+    return 2;
+}
+
+private void importImage(final Uri uri) {
+    executor.execute(() -> {
+        final File cached = new File(getCacheDir(), "lineage_import.bin");
+        setLogStatus("Importando…");
+        mainHandler.post(() -> {
+            pbDownload.setVisibility(View.VISIBLE);
+            pbDownload.setIndeterminate(false);
+            pbDownload.setProgress(0);
+            tvDownloadProgress.setVisibility(View.VISIBLE);
+            tvDownloadProgress.setText("Preparando…");
+            btnDownloadLineage.setEnabled(false);
+        });
+        try {
+            String name = queryName(uri);
+            long size = querySize(uri);
+            appendLog("\n[SETUP] Arquivo escolhido: " + name
+                    + (size > 0 ? " (" + (size / 1048576) + " MB)" : ""));
+
+            runRootCmdDrained("mkdir -p " + STAGE_DIR + " && chmod 777 " + STAGE_DIR);
+            appendLog("[SETUP] Wiping existing userdata for a fresh OOBE...");
+            runRootCmdDrained(wipeUserDataCmd());
+
+            copyUriToFile(uri, cached, size);
+            appendLog("✓ Cópia concluída (" + (cached.length() / 1048576) + " MB)");
+
+            int fmt = sniffFormat(cached);
+            if (fmt == 1) {
+                throw new Exception("Imagem sparse do Android detectada. Converta com simg2img antes (precisa ser raw).");
+            }
+
+            setLogStatus("Extraindo…");
+            String cmd;
+            if (fmt == 0) {
+                mainHandler.post(() -> {
+                    pbDownload.setIndeterminate(true);
+                    tvDownloadProgress.setText("Decompressing image with ARM64 7-Zip…");
+                });
+                appendLog("Formato 7z detectado, extraindo via 7zz...");
+                cmd = "rm -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + "; " +
+                      STAGE_DIR + "/7zz x -y -o" + STAGE_DIR + " " + cached.getAbsolutePath() + " && " +
+                      "mv -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + " && " +
+                      "rm -f " + cached.getAbsolutePath() + " && chmod 644 " + SYSTEM_RAW;
+            } else {
+                mainHandler.post(() -> {
+                    pbDownload.setIndeterminate(true);
+                    tvDownloadProgress.setText("Movendo imagem para o stage…");
+                });
+                appendLog("Imagem raw detectada, movendo direto para system.raw...");
+                cmd = "rm -f " + SYSTEM_RAW + "; " +
+                      "mv -f " + cached.getAbsolutePath() + " " + SYSTEM_RAW + " && chmod 644 " + SYSTEM_RAW;
+            }
+            int ret = runRootCmdDrained(cmd);
+            if (ret != 0 || !new File(SYSTEM_RAW).exists()) {
+                throw new Exception("Falha ao preparar system.raw (exit " + ret + ")");
+            }
+
+            appendLog("✓ system.raw pronto!");
+            mainHandler.post(() -> {
+                pbDownload.setVisibility(View.GONE);
+                tvDownloadProgress.setText("ROM instalada com sucesso!");
+                btnDownloadLineage.setEnabled(true);
+            });
+            setLogStatus("Ready");
+            checkImageStatus();
+        } catch (Exception e) {
+            cached.delete();
+            appendLog("Import failed: " + e.getMessage());
+            setLogStatus("Error");
+            mainHandler.post(() -> {
+                pbDownload.setVisibility(View.GONE);
+                tvDownloadProgress.setText("Falha: " + e.getMessage());
+                btnDownloadLineage.setEnabled(true);
+            });
+        }
+    });
+}
 }

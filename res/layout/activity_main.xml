@@ -23,7 +23,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="OneLineage"
+                android:text="OneLemon"
                 android:textColor="@color/m3_text_primary"
                 android:textSize="26sp"
                 android:fontFamily="sans-serif-medium"
@@ -79,7 +79,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="LineageOS Image: Checking…"
+                android:text="Lemon UI Image: Checking…"
                 android:textColor="@color/m3_text_secondary"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -139,7 +139,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="LineageOS 23.2 Image"
+                android:text="Lemon UI Image"
                 android:textColor="@color/m3_primary"
                 android:textSize="13sp"
                 android:fontFamily="sans-serif-medium" />
@@ -149,7 +149,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Select variant to download from official releases:"
+                android:text="Choose the proper image for your device."
                 android:textColor="@color/m3_text_secondary"
                 android:textSize="13sp" />
 
@@ -189,7 +189,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Vanilla (Clean LineageOS)"
+                            android:text="Lemon UI"
                             android:textColor="@color/m3_text_primary"
                             android:textSize="14sp"
                             android:fontFamily="sans-serif-medium"
@@ -199,60 +199,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="The lightweight option"
-                            android:textColor="@color/m3_text_secondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- Flavor Option 2: MindTheGapps -->
-            <LinearLayout
-                android:id="@+id/card_flavor_gapps"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/radio_item_unselected"
-                android:orientation="vertical"
-                android:padding="14dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <RadioButton
-                        android:id="@+id/rb_gapps"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:checked="false"
-                        android:clickable="false"
-                        android:focusable="false" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="MindTheGapps Edition"
-                            android:textColor="@color/m3_text_primary"
-                            android:textSize="14sp"
-                            android:fontFamily="sans-serif-medium"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:text="Official Google Play Store &amp; Play Services"
+                            android:text="By Lemon UI Team"
                             android:textColor="@color/m3_text_secondary"
                             android:textSize="12sp" />
                     </LinearLayout>
@@ -414,7 +361,7 @@
                 android:fontFamily="monospace"
                 android:padding="12dp"
                 android:scrollbars="vertical"
-                android:text="OneLineage initialized.\n"
+                android:text="OneLemon initialized.\n"
                 android:textColor="@color/m3_log_text"
                 android:textSize="11sp" />
         </LinearLayout>

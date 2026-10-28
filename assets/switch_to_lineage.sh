@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# OneLineage Userspace Takeover Orchestrator
+# OneLemon Userspace Takeover Orchestrator
 STAGE="/data/local/tmp/lineage_stage"
 BB=$(which busybox 2>/dev/null || echo "/data/adb/ksu/bin/busybox")
 [ -x "$BB" ] || BB=$(find /data/adb /system /data -name busybox 2>/dev/null | head -n 1)
@@ -17,6 +17,8 @@ set_prop() {
         setprop "$1" "$2" 2>/dev/null || true
     fi
 }
+
+setprop vendor.hotboot.rom 1
 
 BACKUP_DIR="/data/local/tmp/lineage_backups"
 
@@ -187,7 +189,7 @@ fi
 
 # Ensure all scripts and engine binaries exist in $STAGE
 mkdir -p "$STAGE/data"
-APP_FILES="/data/user/0/com.wewaffles.onelineage/files"
+APP_FILES="/data/user/0/org.lemonui.onelemon/files"
 if [ -d "$APP_FILES" ]; then
     cp -f "$APP_FILES"/* "$STAGE/" 2>/dev/null || true
 fi

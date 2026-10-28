@@ -164,7 +164,7 @@ for pkg in com.android.providers.settings \
            com.android.providers.contacts \
            com.android.providers.calendar \
            org.lineageos.lineagesettings \
-           com.wewaffles.onelineage; do
+           org.lemonui.onelemon; do
     mkdir -p "$STAGE/data/user_de/0/$pkg/databases" \
              "$STAGE/data/user_de/0/$pkg/shared_prefs" \
              "$STAGE/data/user_de/0/$pkg/files/datastore/education" \
