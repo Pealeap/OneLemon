@@ -502,7 +502,7 @@ public class MainActivity extends Activity {
 
 private void downloadLineage() {
     if (!isRootGranted) {
-        appendLog("ERROR: Root privilege required to set up Lemon UI!");
+        appendLog("ERROR: Root privileges required to set up Lemon UI!");
         return;
     }
     Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -549,7 +549,7 @@ private void copyUriToFile(Uri uri, File target, long totalBytes) throws Excepti
     long last = 0, cur = 0;
     try (InputStream in = getContentResolver().openInputStream(uri);
          OutputStream out = new FileOutputStream(target)) {
-        if (in == null) throw new Exception("Não foi possível abrir o arquivo selecionado");
+        if (in == null) throw new Exception("Failed to open the file");
         byte[] buf = new byte[65536];
         int r;
         while ((r = in.read(buf)) != -1) {
@@ -560,7 +560,7 @@ private void copyUriToFile(Uri uri, File target, long totalBytes) throws Excepti
                 last = now;
                 final int pct = totalBytes > 0 ? (int) Math.min(100, cur * 100 / totalBytes) : 0;
                 final double mbs = (cur / 1048576.0) / Math.max(1, (now - start) / 1000);
-                final String s = String.format("Copiando: %d MB%s • %.1f MB/s",
+                final String s = String.format("Copying: %d MB%s • %.1f MB/s",
                         cur / 1048576,
                         totalBytes > 0 ? " / " + (totalBytes / 1048576) + " MB (" + pct + "%)" : "",
                         mbs);
@@ -590,7 +590,7 @@ private int sniffFormat(File f) throws Exception {
 private void importImage(final Uri uri) {
     executor.execute(() -> {
         final File cached = new File(getCacheDir(), "lineage_import.bin");
-        setLogStatus("Importando…");
+        setLogStatus("Importing…");
         mainHandler.post(() -> {
             pbDownload.setVisibility(View.VISIBLE);
             pbDownload.setIndeterminate(false);
@@ -602,7 +602,7 @@ private void importImage(final Uri uri) {
         try {
             String name = queryName(uri);
             long size = querySize(uri);
-            appendLog("\n[SETUP] Arquivo escolhido: " + name
+            appendLog("\n[SETUP] Chosen file: " + name
                     + (size > 0 ? " (" + (size / 1048576) + " MB)" : ""));
 
             runRootCmdDrained("mkdir -p " + STAGE_DIR + " && chmod 777 " + STAGE_DIR);
@@ -610,21 +610,21 @@ private void importImage(final Uri uri) {
             runRootCmdDrained(wipeUserDataCmd());
 
             copyUriToFile(uri, cached, size);
-            appendLog("✓ Cópia concluída (" + (cached.length() / 1048576) + " MB)");
+            appendLog("✓ Finished copying (" + (cached.length() / 1048576) + " MB)");
 
             int fmt = sniffFormat(cached);
             if (fmt == 1) {
-                throw new Exception("Imagem sparse do Android detectada. Converta com simg2img antes (precisa ser raw).");
+                throw new Exception("Sparse image detected, convert it to raw Ext4/EROFS before installing.");
             }
 
-            setLogStatus("Extraindo…");
+            setLogStatus("Unpacking…");
             String cmd;
             if (fmt == 0) {
                 mainHandler.post(() -> {
                     pbDownload.setIndeterminate(true);
                     tvDownloadProgress.setText("Decompressing image with ARM64 7-Zip…");
                 });
-                appendLog("Formato 7z detectado, extraindo via 7zz...");
+                appendLog("Compressed file detected, decompressing via 7zz...");
                 cmd = "rm -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + "; " +
                       STAGE_DIR + "/7zz x -y -o" + STAGE_DIR + " " + cached.getAbsolutePath() + " && " +
                       "mv -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + " && " +
@@ -632,21 +632,21 @@ private void importImage(final Uri uri) {
             } else {
                 mainHandler.post(() -> {
                     pbDownload.setIndeterminate(true);
-                    tvDownloadProgress.setText("Movendo imagem para o stage…");
+                    tvDownloadProgress.setText("Moving image to /data/local/tmp/lineage_stage…");
                 });
-                appendLog("Imagem raw detectada, movendo direto para system.raw...");
+                appendLog("Raw image detected, moving to system.raw...");
                 cmd = "rm -f " + SYSTEM_RAW + "; " +
                       "mv -f " + cached.getAbsolutePath() + " " + SYSTEM_RAW + " && chmod 644 " + SYSTEM_RAW;
             }
             int ret = runRootCmdDrained(cmd);
             if (ret != 0 || !new File(SYSTEM_RAW).exists()) {
-                throw new Exception("Falha ao preparar system.raw (exit " + ret + ")");
+                throw new Exception("Failed to prepare system.raw (exit " + ret + ")");
             }
 
-            appendLog("✓ system.raw pronto!");
+            appendLog("✓ system.raw done!");
             mainHandler.post(() -> {
                 pbDownload.setVisibility(View.GONE);
-                tvDownloadProgress.setText("ROM instalada com sucesso!");
+                tvDownloadProgress.setText("The ROM was installed succesfully!");
                 btnDownloadLineage.setEnabled(true);
             });
             setLogStatus("Ready");
@@ -657,7 +657,7 @@ private void importImage(final Uri uri) {
             setLogStatus("Error");
             mainHandler.post(() -> {
                 pbDownload.setVisibility(View.GONE);
-                tvDownloadProgress.setText("Falha: " + e.getMessage());
+                tvDownloadProgress.setText("Something went wrong: " + e.getMessage());
                 btnDownloadLineage.setEnabled(true);
             });
         }
