@@ -17,6 +17,24 @@ $BB mount -t proc proc /proc
 
 export PATH=/system/bin:/system/xbin
 
+# OneLemon used to ship OneLineage's zygote_exec, which hardcodes LineageOS's
+# BOOTCLASSPATH/SYSTEMSERVERCLASSPATH (including org.lineageos.platform.jar).
+# A One UI guest needs its own Samsung class path, so derive it from the guest's
+# classpaths protobufs exactly as init does. zygote_exec now reads these
+# variables from the environment.
+DERIVE=/apex/com.android.sdkext/bin/derive_classpath
+CLASSPATH_FILE=/data/system/environ/classpath
+mkdir -p /data/system/environ
+if [ -x "$DERIVE" ] && "$DERIVE" "$CLASSPATH_FILE" > /data/derive_classpath.log 2>&1; then
+    while read -r kw name value; do
+        [ "$kw" = "export" ] && [ -n "$name" ] && export "$name=$value"
+    done < "$CLASSPATH_FILE"
+    echo "[Pivoted Root] Guest class paths loaded from $CLASSPATH_FILE"
+else
+    echo "[Pivoted Root] WARNING: derive_classpath failed, zygote keeps the host's class paths"
+    sed 's/^/[Pivoted Root]   /' /data/derive_classpath.log 2>/dev/null | head -5
+fi
+
 echo "[Pivoted Root] Setting up /data_mirror and /data/data mounts for Zygote isolation..."
 $BB mount --bind /data/user/0 /data/data 2>/dev/null || true
 $BB mount -t tmpfs tmpfs /data_mirror 2>/dev/null || true
@@ -49,6 +67,32 @@ exec 8<&-
 
 echo "[Pivoted Root] Testing su availability:"
 su -c id || echo "su check non-fatal"
+
+# The vendor composer still treats the killed host SurfaceFlinger as its
+# client: every frame from the guest comes back NO_RESOURCES and the panel
+# keeps One UI's last frame. Restart it so the guest gets a fresh client.
+COMPOSER_SVC=""
+for c in vendor.qti.hardware.display.composer vendor.hwcomposer-3 vendor.hwcomposer; do
+    [ -n "$(getprop init.svc.$c)" ] && { COMPOSER_SVC=$c; break; }
+done
+[ -n "$COMPOSER_SVC" ] || COMPOSER_SVC=$(getprop | sed -n 's/^\[init\.svc\.\([^]]*\)\]: \[running\]$/\1/p' | grep -m1 -E 'hwcomposer|display\.composer|graphics\.composer')
+echo "[Pivoted Root] Restarting the vendor display composer (${COMPOSER_SVC:-none found})..."
+[ -z "$COMPOSER_SVC" ] || setprop ctl.restart "$COMPOSER_SVC"
+sleep 0.5
+n=0
+while [ $n -lt 30 ] && ! service check android.hardware.graphics.composer3.IComposer/default 2>/dev/null | grep -q ': found'; do
+    n=$((n + 1)); sleep 0.1
+done
+echo "[Pivoted Root] Composer registered after $(((5 + n) * 100)) ms"
+# The composer's rc has "onrestart restart surfaceflinger", which brings the
+# HOST SurfaceFlinger back. Stop it before the guest's SurfaceFlinger owns the
+# display and the SurfaceFlinger service name.
+setprop ctl.stop surfaceflinger
+n=0
+while [ $n -lt 20 ] && pidof surfaceflinger >/dev/null; do
+    kill -9 $(pidof surfaceflinger) 2>/dev/null
+    n=$((n + 1)); sleep 0.1
+done
 
 echo "[Pivoted Root] Starting LineageOS SurfaceFlinger..."
 # sf.log used to grow without bound: the guest's RenderEngine dumps LLVM IR for

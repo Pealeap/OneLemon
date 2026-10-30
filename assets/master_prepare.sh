@@ -37,9 +37,21 @@ if ! mount | grep -q "$ROOTFS "; then
         $BB losetup -d "$l" 2>/dev/null || true
     done
     LOOP=$($BB losetup -f)
-    $BB losetup "$LOOP" "$STAGE/system.raw"
-    echo "Using LOOP: $LOOP"
-    $BB mount -t ext4 -o ro "$LOOP" "$ROOTFS"
+    if ! $BB losetup -r "$LOOP" "$STAGE/system.raw"; then
+        echo "ERROR: could not attach system.raw read-only ($LOOP)!"
+        exit 1
+    fi
+    # The staged image may be ext4 (GSI) or EROFS (stock Samsung system.img).
+    # Mounting an EROFS image with -t ext4 fails with EINVAL, which used to be
+    # ignored: the rootfs stayed an empty directory and pivot_root then failed.
+    FSTYPE=ext4
+    [ "$($BB od -An -tx4 -j1024 -N4 "$STAGE/system.raw" 2>/dev/null | tr -d ' ')" = "e0f5e1e2" ] && FSTYPE=erofs
+    echo "Using LOOP: $LOOP ($FSTYPE)"
+    if ! $BB mount -t "$FSTYPE" -o ro "$LOOP" "$ROOTFS"; then
+        echo "ERROR: failed to mount system.raw as $FSTYPE on $ROOTFS!"
+        $BB losetup -d "$LOOP" 2>/dev/null || true
+        exit 1
+    fi
 fi
 
 mkdir -p "$ROOTFS/postinstall" "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys" \
@@ -48,7 +60,13 @@ mkdir -p "$ROOTFS/postinstall" "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys" \
 
 echo "=== 4. Setting up Core System Bind Mounts ==="
 mount | grep -q "$ROOTFS/proc " || $BB mount -t proc proc "$ROOTFS/proc"
-mount | grep -q "$ROOTFS/sys " || $BB mount -t sysfs sysfs "$ROOTFS/sys"
+# Bind the host's whole /sys, not a fresh sysfs: the guest needs the cgroup2
+# hierarchy at /sys/fs/cgroup (zygote's createProcessGroup fails without it and
+# system_server dies on fork), plus selinuxfs and the bpf fs.
+if ! mount | grep -q "$ROOTFS/sys "; then
+    $BB mount --rbind /sys "$ROOTFS/sys"
+    $BB mount --make-rslave "$ROOTFS/sys"
+fi
 
 if [ ! -e /dev/binderfs/binder ]; then
     mount -t binder binder /dev/binderfs 2>/dev/null || true
@@ -66,6 +84,50 @@ mount | grep -q "$ROOTFS/linkerconfig " || $BB mount --rbind /linkerconfig "$ROO
 mount | grep -q "$ROOTFS/vendor " || $BB mount --bind /vendor "$ROOTFS/vendor"
 mount | grep -q "$ROOTFS/odm " || $BB mount --bind /odm "$ROOTFS/odm"
 mount | grep -q "$ROOTFS/vendor_dlkm " || $BB mount --bind /vendor_dlkm "$ROOTFS/vendor_dlkm"
+# A stock Samsung system.img has empty system_ext/product/system_dlkm folders:
+# they are separate partitions (LemonUI ships system_ext.img and product.img
+# alongside system.img). Prefer the staged partition images (same build as the
+# modded system.img); fall back to the host partition when they are absent.
+mount_part_image() {
+    pimg="$STAGE/$1.raw"
+    pdest="$ROOTFS/$1"
+    [ -f "$pimg" ] || return 1
+    if mount | grep -q " $pdest "; then
+        echo "$1 already mounted at $pdest"
+        return 0
+    fi
+    for l in $($BB losetup -a | grep -F "$pimg" | cut -d: -f1); do
+        $BB losetup -d "$l" 2>/dev/null || true
+    done
+    ploop=$($BB losetup -f)
+    if ! $BB losetup -r "$ploop" "$pimg"; then
+        echo "ERROR: could not attach $pimg read-only ($ploop)!"
+        return 2
+    fi
+    pfstype=ext4
+    [ "$($BB od -An -tx4 -j1024 -N4 "$pimg" 2>/dev/null | tr -d ' ')" = "e0f5e1e2" ] && pfstype=erofs
+    if ! $BB mount -t "$pfstype" -o ro "$ploop" "$pdest"; then
+        echo "ERROR: failed to mount $pimg as $pfstype on $pdest!"
+        $BB losetup -d "$ploop" 2>/dev/null || true
+        return 2
+    fi
+    echo "Mounted $pimg ($pfstype) on $pdest"
+    return 0
+}
+
+for part in system_ext product; do
+    [ -d "$ROOTFS/$part" ] || continue
+    if [ -f "$STAGE/$part.raw" ]; then
+        mount_part_image "$part" || exit 1
+    elif [ -d "/$part" ] && [ -z "$(ls -A "$ROOTFS/$part" 2>/dev/null)" ]; then
+        if ! mount | grep -q " $ROOTFS/$part "; then
+            $BB mount --bind "/$part" "$ROOTFS/$part" && echo "Bound host /$part -> $ROOTFS/$part"
+        fi
+    fi
+done
+if [ -d /system_dlkm ] && [ -d "$ROOTFS/system_dlkm" ] && [ -z "$(ls -A "$ROOTFS/system_dlkm" 2>/dev/null)" ]; then
+    mount | grep -q " $ROOTFS/system_dlkm " || $BB mount --bind /system_dlkm "$ROOTFS/system_dlkm" && echo "Bound host /system_dlkm -> $ROOTFS/system_dlkm"
+fi
 # apexd is a HOST daemon: it reports the Samsung apex set (/system/apex,
 # /system_ext/apex, /vendor/apex) to the container system_server, which then
 # tries to parse those exact paths inside this namespace. Keep the apex
@@ -76,16 +138,16 @@ if [ -d /system_ext/apex ]; then
     mount | grep -q "$ROOTFS/system_ext/apex " || $BB mount --bind /system_ext/apex "$ROOTFS/system_ext/apex"
 fi
 mount | grep -q "$ROOTFS/mnt " || $BB mount --rbind /mnt "$ROOTFS/mnt"
-if [ -f "$STAGE/services_patched.jar" ]; then
-    $BB umount -l "$ROOTFS/system/framework/services.jar" 2>/dev/null || true
-    $BB mount --bind "$STAGE/services_patched.jar" "$ROOTFS/system/framework/services.jar"
-    echo "Bound services_patched.jar -> $ROOTFS/system/framework/services.jar"
-fi
-if [ -f "$STAGE/framework_patched.jar" ]; then
-    $BB umount -l "$ROOTFS/system/framework/framework.jar" 2>/dev/null || true
-    $BB mount --bind "$STAGE/framework_patched.jar" "$ROOTFS/system/framework/framework.jar"
-    echo "Bound framework_patched.jar -> $ROOTFS/system/framework/framework.jar"
-fi
+#if [ -f "$STAGE/services_patched.jar" ]; then
+#    $BB umount -l "$ROOTFS/system/framework/services.jar" 2>/dev/null || true
+#    $BB mount --bind "$STAGE/services_patched.jar" "$ROOTFS/system/framework/services.jar"
+#    echo "Bound services_patched.jar -> $ROOTFS/system/framework/services.jar"
+#fi
+#if [ -f "$STAGE/framework_patched.jar" ]; then
+#    $BB umount -l "$ROOTFS/system/framework/framework.jar" 2>/dev/null || true
+#    $BB mount --bind "$STAGE/framework_patched.jar" "$ROOTFS/system/framework/framework.jar"
+#    echo "Bound framework_patched.jar -> $ROOTFS/system/framework/framework.jar"
+#fi
 if [ -f "$STAGE/libaudio_aidl_conversion_common_cpp_patched.so" ]; then
     $BB umount -l "$ROOTFS/system/lib64/libaudio_aidl_conversion_common_cpp.so" 2>/dev/null || true
     $BB mount --bind "$STAGE/libaudio_aidl_conversion_common_cpp_patched.so" "$ROOTFS/system/lib64/libaudio_aidl_conversion_common_cpp.so"
@@ -96,11 +158,11 @@ if [ -f "$STAGE/libaudioclient_aidl_conversion_patched.so" ]; then
     $BB mount --bind "$STAGE/libaudioclient_aidl_conversion_patched.so" "$ROOTFS/system/lib64/libaudioclient_aidl_conversion.so"
     echo "Bound libaudioclient_aidl_conversion_patched.so"
 fi
-if [ -f "$STAGE/framework-res_patched.apk" ]; then
-    $BB umount -l "$ROOTFS/system/framework/framework-res.apk" 2>/dev/null || true
-    $BB mount --bind "$STAGE/framework-res_patched.apk" "$ROOTFS/system/framework/framework-res.apk"
-    echo "Bound framework-res_patched.apk -> $ROOTFS/system/framework/framework-res.apk"
-fi
+#if [ -f "$STAGE/framework-res_patched.apk" ]; then
+#    $BB umount -l "$ROOTFS/system/framework/framework-res.apk" 2>/dev/null || true
+#    $BB mount --bind "$STAGE/framework-res_patched.apk" "$ROOTFS/system/framework/framework-res.apk"
+#    echo "Bound framework-res_patched.apk -> $ROOTFS/system/framework/framework-res.apk"
+#fi
 
 if [ -f "$STAGE/PermissionController_patched.apk" ]; then
     chmod 644 "$STAGE/PermissionController_patched.apk"
@@ -558,7 +620,13 @@ $BB mount -t tmpfs tmpfs "$ROOTFS/apex"
 # and PMS parses the paths it reports. That is why the host's apex directories
 # are bound into this rootfs (see the /system_ext/apex and /system/apex binds):
 # every path in this list must resolve after the pivot.
-if [ -f "$STAGE/clean_apex_info_list.xml" ]; then
+if grep -q '^ro.build.version.sem=' "$ROOTFS/system/build.prop" 2>/dev/null; then
+    # A stock Samsung guest runs against the host's own apexd set (the same
+    # phone, same vendor), so its live apex-info-list.xml is the correct one.
+    # The clean list shipped for the Lineage GSI has older versionCodes.
+    cp -a /apex/apex-info-list.xml "$ROOTFS/apex/" 2>/dev/null || \
+        cp "$STAGE/clean_apex_info_list.xml" "$ROOTFS/apex/apex-info-list.xml" 2>/dev/null || true
+elif [ -f "$STAGE/clean_apex_info_list.xml" ]; then
     cp "$STAGE/clean_apex_info_list.xml" "$ROOTFS/apex/apex-info-list.xml"
 else
     cp -a /apex/apex-info-list.xml "$ROOTFS/apex/" 2>/dev/null || true

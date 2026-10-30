@@ -18,8 +18,6 @@ set_prop() {
     fi
 }
 
-setprop vendor.hotboot.rom 1
-
 BACKUP_DIR="/data/local/tmp/lineage_backups"
 
 echo "=== LINEAGEOS 23.2 TAKEOVER STARTING ==="
@@ -209,6 +207,8 @@ echo "=== [6/6] Launching LineageOS Takeover Daemon ==="
 pkill -f "while true; do [ \"\$(getprop init.svc.zygote)\"" 2>/dev/null || true
 pkill -f "while true; do for p in \\\$(pidof audioserver cameraserver)" 2>/dev/null || true
 setprop ctl.stop zygote
+printf V 2>&1 > /dev/watchdog # From OneOS: stop watchdog 
+setprop vendor.hotboot.rom 1 # This is still needed, fk mtk
 setprop ctl.stop surfaceflinger
 # audioserver/cameraserver are deliberately left running. The guest shares this
 # binder namespace, and its AudioService.<init> -> AudioDeviceBroker.init ->

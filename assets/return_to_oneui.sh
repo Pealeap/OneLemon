@@ -1,5 +1,6 @@
 #!/system/bin/sh
 # Return to One UI / Safe State Restoration
+STAGE="/data/local/tmp/lineage_stage"
 BACKUP_DIR="/data/local/tmp/lineage_backups"
 
 echo "=== [1/5] Terminating Container Supervision & Zygote ==="
@@ -38,15 +39,15 @@ if [ -d "$BACKUP_DIR" ] && [ -d "$LAUNCHER_DATA/databases" ]; then
 fi
 
 echo "=== [3/5] Unmounting Container Overlays ==="
-umount -l /data/local/tmp/lineage_stage/rootfs/* 2>/dev/null || true
-umount -l /data/local/tmp/lineage_stage/rootfs/apex/* 2>/dev/null || true
-while mount | grep -q "/data/local/tmp/lineage_stage/rootfs"; do
-    umount -l /data/local/tmp/lineage_stage/rootfs 2>/dev/null || true
+umount -l "$STAGE/rootfs"/* 2>/dev/null || true
+umount -l "$STAGE/rootfs/apex"/* 2>/dev/null || true
+while mount | grep -q "$STAGE/rootfs"; do
+    umount -l "$STAGE/rootfs" 2>/dev/null || true
     sleep 0.1
 done
 BB=$(which busybox 2>/dev/null || echo /data/adb/ksu/bin/busybox)
 if [ -x "$BB" ]; then
-    for l in $($BB losetup -a | grep "system.raw" | cut -d: -f1); do
+    for l in $($BB losetup -a | grep -F "$STAGE" | cut -d: -f1); do
         $BB losetup -d "$l" 2>/dev/null || true
     done
 fi
