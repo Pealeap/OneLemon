@@ -128,6 +128,18 @@ done
 if [ -d /system_dlkm ] && [ -d "$ROOTFS/system_dlkm" ] && [ -z "$(ls -A "$ROOTFS/system_dlkm" 2>/dev/null)" ]; then
     mount | grep -q " $ROOTFS/system_dlkm " || $BB mount --bind /system_dlkm "$ROOTFS/system_dlkm" && echo "Bound host /system_dlkm -> $ROOTFS/system_dlkm"
 fi
+# The LemonUI image carries the host's DZJ7 framework.jar but its own DZJ3
+# services.jar/aconfig files. The DZJ7 framework's generated Flags class expects
+# the DZJ7 flag map; with the image's DZJ3 map, AdvancedProtectionService dies on
+# "Invalid feature flag: android.security.aapm_feature_disable_insecure_wifi_autojoin".
+# Present the host's read-only aconfig files, which match framework.jar.
+for ac in system/etc/aconfig system_ext/etc/aconfig product/etc/aconfig; do
+    [ -d "/$ac" ] || continue
+    [ -d "$ROOTFS/$ac" ] || continue
+    if ! mount | grep -q " $ROOTFS/$ac "; then
+        $BB mount --bind "/$ac" "$ROOTFS/$ac" && echo "Bound host /$ac -> $ROOTFS/$ac"
+    fi
+done
 # apexd is a HOST daemon: it reports the Samsung apex set (/system/apex,
 # /system_ext/apex, /vendor/apex) to the container system_server, which then
 # tries to parse those exact paths inside this namespace. Keep the apex
@@ -711,8 +723,11 @@ for a in /apex/*; do
     base=$(basename "$a")
     case "$base" in
         *samsung*)
-       continue
-       ;;
+            # A One UI guest needs Samsung's own APEX class paths
+            # (framework-samsung-shell.jar, framework-lifeguard.jar, ...).
+            # Only a non-Samsung GSI should skip them.
+            grep -q '^ro.build.version.sem=' "$ROOTFS/system/build.prop" 2>/dev/null || continue
+            ;;
     esac
     # Skip if already mounted
     if ! mount | grep -q "$ROOTFS/apex/$base "; then

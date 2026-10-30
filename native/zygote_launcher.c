@@ -12,8 +12,10 @@
  *
  * Like init's "socket zygote stream 660 root system" it creates the zygote and
  * usap pool sockets, passes them as fds 3 and 4, and closes every other fd
- * before the exec. stderr/stdout go to /data/zygote_stderr.log so a guest that
- * dies before logd is up still leaves a trace.
+ * before the exec. stdout/stderr go to /dev/null: zygote's ForkCommon checks
+ * every inherited fd against an allowlist and aborts system_server on anything
+ * else ("Not allowlisted: /data/zygote_stderr.log"). Zygote's own diagnostics
+ * go through logd, so logcat still has them.
  */
 #include <fcntl.h>
 #include <stdio.h>
@@ -93,17 +95,12 @@ int main(void) {
             jit ? jit : "unset");
 
     int null_fd = open("/dev/null", O_RDWR);
-    int log_fd = open("/data/zygote_stderr.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (null_fd >= 0) dup3(null_fd, 0, 0);
-    if (log_fd >= 0) {
-        dup3(log_fd, 1, 0);
-        dup3(log_fd, 2, 0);
-    } else if (null_fd >= 0) {
+    if (null_fd >= 0) {
+        dup3(null_fd, 0, 0);
         dup3(null_fd, 1, 0);
         dup3(null_fd, 2, 0);
     }
     if (null_fd > 4) close(null_fd);
-    if (log_fd > 4) close(log_fd);
     for (int fd = 5; fd < 1024; fd++) close(fd);
 
     char *argv[8];
