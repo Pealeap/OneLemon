@@ -140,6 +140,24 @@ for ac in system/etc/aconfig system_ext/etc/aconfig product/etc/aconfig; do
         $BB mount --bind "/$ac" "$ROOTFS/$ac" && echo "Bound host /$ac -> $ROOTFS/$ac"
     fi
 done
+# At runtime FeatureFlags reads the aconfig storage in /metadata/aconfig, not
+# the read-only /system/etc/aconfig maps. The guest's /metadata is empty, so
+# every lookup fails with "Invalid feature flag". Stage a copy of the host's
+# storage (so guest writes cannot touch the host's) and present it under a
+# private tmpfs at the guest's /metadata.
+if [ -d /metadata/aconfig ]; then
+    mkdir -p "$STAGE/metadata_aconfig"
+    cp -a /metadata/aconfig/. "$STAGE/metadata_aconfig/" 2>/dev/null || true
+    mkdir -p "$ROOTFS/metadata"
+    if ! mount | grep -q " $ROOTFS/metadata "; then
+        $BB mount -t tmpfs tmpfs "$ROOTFS/metadata" 2>/dev/null || true
+    fi
+    mkdir -p "$ROOTFS/metadata/aconfig"
+    if ! mount | grep -q " $ROOTFS/metadata/aconfig "; then
+        $BB mount --bind "$STAGE/metadata_aconfig" "$ROOTFS/metadata/aconfig" && \
+            echo "Bound staged host /metadata/aconfig -> $ROOTFS/metadata/aconfig"
+    fi
+fi
 # apexd is a HOST daemon: it reports the Samsung apex set (/system/apex,
 # /system_ext/apex, /vendor/apex) to the container system_server, which then
 # tries to parse those exact paths inside this namespace. Keep the apex

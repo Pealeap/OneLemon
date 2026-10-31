@@ -16,12 +16,23 @@ pkill -9 -f "system_server" 2>/dev/null || true
 pkill -9 -f org.lineageos 2>/dev/null || true
 pkill -9 -x zygote64 2>/dev/null || true
 kill -9 $(pidof surfaceflinger) 2>/dev/null || true
+# The guest's vold/wificond/bootanimation are not named after LineageOS and can
+# keep binder names or mount references alive. master_inner.sh recorded their
+# PIDs in takeover.log; kill exactly those, never the host's vold by name.
+for key in "Vold PID" "wificond PID" "BootAnimation PID"; do
+    p=$(sed -n "s/.*$key: //p" "$STAGE/data/takeover.log" 2>/dev/null | tail -n 1)
+    case "$p" in
+        ''|*[!0-9]*) ;;
+        *) kill -9 "$p" 2>/dev/null || true ;;
+    esac
+done
 
 # Put the host's own /data trees back FIRST: master_prepare.sh bridges the
 # staged app trees (installd/artd write there), and the One UI launcher restore
-# below must read the host's real /data/user/0, not the guest's.
+# below must read the host's real /data/user/0, not the guest's. -l because a
+# dying guest process may still hold the mount.
 for d in app app-staging user user_de dalvik-cache misc/profiles; do
-    umount "/data/$d" 2>/dev/null || true
+    umount -l "/data/$d" 2>/dev/null || true
 done
 
 echo "=== [2/5] Restoring One UI Home Screen Layout & Permissions ==="
@@ -39,6 +50,12 @@ if [ -d "$BACKUP_DIR" ] && [ -d "$LAUNCHER_DATA/databases" ]; then
 fi
 
 echo "=== [3/5] Unmounting Container Overlays ==="
+# Deepest first: metadata/aconfig, system_ext/apex, apex payloads, etc.
+if [ -r /proc/self/mountinfo ]; then
+    for m in $(awk -v p="$STAGE/rootfs" '$5 == p || index($5, p "/") == 1 {print $5}' /proc/self/mountinfo | sort -r); do
+        umount -l "$m" 2>/dev/null || true
+    done
+fi
 umount -l "$STAGE/rootfs"/* 2>/dev/null || true
 umount -l "$STAGE/rootfs/apex"/* 2>/dev/null || true
 while mount | grep -q "$STAGE/rootfs"; do
@@ -69,6 +86,24 @@ setprop ctl.start cameraserver
 for svc in media media.extractor media.metrics wificond; do
     setprop ctl.start $svc 2>/dev/null || true
 done
+
+# The in-place return can fail if a dying guest process still holds a mount or
+# a binder name. Verify that One UI's framework actually came back; if not,
+# reboot instead of leaving the phone on a black screen.
+n=0
+while [ $n -lt 60 ]; do
+    pidof system_server >/dev/null 2>&1 && break
+    n=$((n + 1))
+    sleep 1
+done
+if ! pidof system_server >/dev/null 2>&1; then
+    echo "FAILSAFE: One UI system_server did not start after 60s; rebooting"
+    sync
+    setprop sys.powerctl reboot
+    exit 1
+fi
+echo "One UI system_server PID $(pidof system_server)"
+
 am force-stop com.sec.android.app.launcher 2>/dev/null || true
 am start -a android.intent.action.MAIN -c android.intent.category.HOME 2>/dev/null || true
 

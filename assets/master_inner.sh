@@ -111,10 +111,20 @@ ANIM_PID=$!
 echo "[Pivoted Root] BootAnimation PID: $ANIM_PID"
 sleep 1
 
-echo "[Pivoted Root] Starting LineageOS Vold..."
-/system/bin/vold --blkid_context=u:r:blkid:s0 --blkid_untrusted_context=u:r:blkid_untrusted:s0 --fsck_context=u:r:fsck:s0 --fsck_untrusted_context=u:r:fsck_untrusted:s0 > /data/vold.log 2>&1 &
-VOLD_PID=$!
-echo "[Pivoted Root] Vold PID: $VOLD_PID"
+# A stock One UI guest has a DZJ3 vold but the image carries the host's DZJ7
+# framework.jar. The DZJ7 IVold interface has setCeStorageProtection(), which
+# the older guest vold does not implement: LockSettingsService dies with
+# "ServiceSpecificException (code 0)" during first-boot synthetic-password
+# setup. Keep using the host's already-running DZJ7 vold instead of starting
+# the guest's older one. A GSI guest still starts its own vold.
+if grep -q '^ro.build.version.sem=' /system/build.prop 2>/dev/null; then
+    echo "[Pivoted Root] Stock Samsung guest: using the host vold (DZJ7)"
+else
+    echo "[Pivoted Root] Starting LineageOS Vold..."
+    /system/bin/vold --blkid_context=u:r:blkid:s0 --blkid_untrusted_context=u:r:blkid_untrusted:s0 --fsck_context=u:r:fsck:s0 --fsck_untrusted_context=u:r:fsck_untrusted:s0 > /data/vold.log 2>&1 &
+    VOLD_PID=$!
+    echo "[Pivoted Root] Vold PID: $VOLD_PID"
+fi
 sleep 1
 
 # Wifi. switch_to_lineage.sh stops the host wificond; the guest's own registers
